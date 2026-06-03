@@ -41,6 +41,34 @@ body {
 
 .content { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 
+.stats-box {
+  display: flex;
+  background: #0a0a0f;
+  border: 1px solid #1e1e2e;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.stats-item {
+  flex: 1;
+  padding: 10px 12px;
+  text-align: center;
+}
+.stats-divider {
+  width: 1px;
+  background: #1e1e2e;
+}
+.stats-label {
+  font-size: 10px;
+  color: #475569;
+  margin-bottom: 4px;
+}
+.stats-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #6366f1;
+  font-variant-numeric: tabular-nums;
+}
+
 .section { display: flex; flex-direction: column; gap: 6px; }
 
 .label {

@@ -4,6 +4,20 @@ const autoInsertBtn = document.getElementById('auto-insert-toggle')
 const saveBtn       = document.getElementById('save-btn')
 const savedMsg      = document.getElementById('saved-msg')
 
+// 統計表示
+function formatTime(secs) {
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return `${m}分${s}秒`
+}
+
+chrome.storage.sync.get({ totalRecordingSecs: 0 }, (data) => {
+  const total = data.totalRecordingSecs
+  const saved = Math.round(total * 2.5) // 話す速度はタイピングの約3.5倍 → 節約 = total × 2.5
+  document.getElementById('stats-total').textContent = formatTime(total)
+  document.getElementById('stats-saved').textContent = formatTime(saved)
+})
+
 // Load saved settings
 chrome.storage.sync.get(['groqKey', 'claudeKey', 'autoInsert'], (data) => {
   if (data.groqKey)   groqInput.value   = data.groqKey
