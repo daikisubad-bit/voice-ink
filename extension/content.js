@@ -114,6 +114,8 @@
   function togglePanel() {
     panelVisible = !panelVisible
     panel.classList.toggle('hidden', !panelVisible)
+    // パネルが開いたら録音ボタンにフォーカスを移す（Spaceキーが入力欄に奪われるのを防ぐ）
+    if (panelVisible) setTimeout(() => recordBtn()?.focus(), 50)
   }
 
   fab.addEventListener('click', togglePanel)
