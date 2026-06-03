@@ -60,8 +60,7 @@ export function useClaude() {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-5',
-          max_tokens: 10000,
-          thinking: { type: 'enabled', budget_tokens: 8000 },
+          max_tokens: 2048,
           system: systemPrompt,
           messages: [{ role: 'user', content: text }],
         }),

@@ -3,6 +3,7 @@
 
   // ---- State ----
   let panelVisible = false
+  let thinkingMode = false
   let recorderState = 'idle' // idle | recording | processing
   let mediaRecorder = null
   let audioChunks = []
@@ -12,7 +13,7 @@
   let animFrame = null
   let timerInterval = null
   let timerSecs = 0
-  let currentStyle = 'business'
+  let currentStyle = 'casual'
   let lastFocusedInput = null
   let transcript = null
   let refined = null
@@ -27,8 +28,8 @@
 
   // ---- Styles config ----
   const STYLES = [
-    { id: 'business', label: '📝 ビジネス' },
     { id: 'casual',   label: '💬 カジュアル' },
+    { id: 'business', label: '📝 ビジネス' },
     { id: 'bullet',   label: '📋 箇条書き' },
     { id: 'summary',  label: '📊 要約' },
   ]
@@ -113,6 +114,11 @@
 
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-action=close]')) togglePanel()
+    if (e.target.closest('[data-action=toggle-thinking]')) {
+      thinkingMode = !thinkingMode
+      const btn = panel.querySelector('.vi-thinking-btn')
+      if (btn) btn.classList.toggle('active', thinkingMode)
+    }
   })
 
   // ---- Tab switching ----
@@ -255,9 +261,9 @@
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-5',
-          max_tokens: 10000,
-          thinking: { type: 'enabled', budget_tokens: 8000 },
-          system: SYSTEM_PROMPTS[currentStyle] || SYSTEM_PROMPTS.business,
+          max_tokens: thinkingMode ? 10000 : 2048,
+          ...(thinkingMode ? { thinking: { type: 'enabled', budget_tokens: 8000 } } : {}),
+          system: SYSTEM_PROMPTS[currentStyle] || SYSTEM_PROMPTS.casual,
           messages: [{ role: 'user', content: text }],
         }),
       })
@@ -428,6 +434,7 @@
       <div class="vi-header">
         <div class="vi-title"><span class="vi-dot"></span>VoiceInk</div>
         <div style="display:flex;align-items:center;gap:6px">
+          <button class="vi-thinking-btn" data-action="toggle-thinking" title="🧠 Thinkingモード（精度UP・低速）">🧠</button>
           <button class="vi-close" data-action="close">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>

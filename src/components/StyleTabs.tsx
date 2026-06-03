@@ -13,8 +13,8 @@ interface Props {
 }
 
 const BUILTIN_TABS: { id: BuiltinStyle; label: string }[] = [
-  { id: 'business', label: '📝 ビジネス' },
   { id: 'casual', label: '💬 カジュアル' },
+  { id: 'business', label: '📝 ビジネス' },
   { id: 'bullet', label: '📋 箇条書き' },
   { id: 'summary', label: '📊 要約' },
 ]

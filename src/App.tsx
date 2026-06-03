@@ -17,7 +17,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { Toast } from './components/Toast'
 
 export default function App() {
-  const [selectedStyleId, setSelectedStyleId] = useState<string>('business')
+  const [selectedStyleId, setSelectedStyleId] = useState<string>('casual')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dictOpen, setDictOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
