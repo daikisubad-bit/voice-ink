@@ -5,11 +5,12 @@ interface Props {
   state: RecorderState
   volume: number
   duration: number
+  tapMode: boolean
   onStart: () => void
   onStop: () => void
 }
 
-export function RecordButton({ state, volume, duration, onStart, onStop }: Props) {
+export function RecordButton({ state, volume, duration, tapMode, onStart, onStop }: Props) {
   const isRecording = state === 'recording'
   const isProcessing = state === 'processing'
 
@@ -19,27 +20,33 @@ export function RecordButton({ state, volume, duration, onStart, onStop }: Props
     return `${m}:${sec.toString().padStart(2, '0')}`
   }
 
-  // Wave bars: 5 bars animated by volume
   const bars = Array.from({ length: 5 }, (_, i) => {
     const phase = (i / 4) * Math.PI
-    const height = isRecording ? 8 + volume * 40 * Math.abs(Math.sin(phase + Date.now() / 300)) : 4
-    return height
+    return isRecording ? 8 + volume * 40 * Math.abs(Math.sin(phase)) : 4
   })
 
-  const pressStart = useCallback(
+  // タップモード: クリックで開始/停止トグル
+  const handleTap = useCallback(() => {
+    if (isProcessing) return
+    if (isRecording) onStop()
+    else onStart()
+  }, [isProcessing, isRecording, onStart, onStop])
+
+  // 長押しモード
+  const handlePressStart = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault()
-      if (state === 'idle') onStart()
+      if (!tapMode && state === 'idle') onStart()
     },
-    [state, onStart],
+    [tapMode, state, onStart],
   )
 
-  const pressEnd = useCallback(
+  const handlePressEnd = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault()
-      if (state === 'recording') onStop()
+      if (!tapMode && state === 'recording') onStop()
     },
-    [state, onStop],
+    [tapMode, state, onStop],
   )
 
   return (
@@ -58,9 +65,10 @@ export function RecordButton({ state, volume, duration, onStart, onStop }: Props
 
       <div className="relative">
         <button
-          onPointerDown={pressStart}
-          onPointerUp={pressEnd}
-          onPointerLeave={pressEnd}
+          onClick={tapMode ? handleTap : undefined}
+          onPointerDown={tapMode ? undefined : handlePressStart}
+          onPointerUp={tapMode ? undefined : handlePressEnd}
+          onPointerLeave={tapMode ? undefined : handlePressEnd}
           disabled={isProcessing}
           className={[
             'relative w-20 h-20 rounded-full flex items-center justify-center',
@@ -96,6 +104,8 @@ export function RecordButton({ state, volume, duration, onStart, onStop }: Props
           <span className="text-red-400 font-mono">{formatDuration(duration)}</span>
         ) : isProcessing ? (
           '処理中...'
+        ) : tapMode ? (
+          'タップして録音'
         ) : (
           'ボタンを押して録音'
         )}
