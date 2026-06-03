@@ -509,7 +509,7 @@
       <div class="vi-body">
         <div class="vi-waves"></div>
         <div class="vi-status">タップして録音</div>
-        <button class="vi-record-btn">${micIcon()}</button>
+        <button class="vi-record-btn" tabindex="0">${micIcon()}</button>
         <div id="vi-error" class="vi-error hidden"></div>
         <div id="vi-transcript-box" class="vi-transcript hidden">
           <div class="vi-transcript-label">文字起こし（原文）</div>
