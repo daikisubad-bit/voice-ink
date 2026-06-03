@@ -553,5 +553,12 @@
   // ---- Keyboard shortcut from background ----
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'TOGGLE_VOICEINK') togglePanel()
+    if (msg.type === 'TOGGLE_RECORDING') {
+      if (!panelVisible) togglePanel() // パネルが閉じていたら開く
+      setTimeout(() => {
+        if (recorderState === 'idle') startRecording()
+        else if (recorderState === 'recording') stopRecording()
+      }, panelVisible ? 0 : 100)
+    }
   })
 })()

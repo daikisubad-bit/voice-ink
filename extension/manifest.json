@@ -40,6 +40,13 @@
         "mac": "Command+Shift+Y"
       },
       "description": "VoiceInkを開く/閉じる"
+    },
+    "toggle-recording": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+R",
+        "mac": "Command+Shift+R"
+      },
+      "description": "録音開始/停止"
     }
   },
   "icons": {
