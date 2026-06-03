@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 
-export type RefinementStyle = 'business' | 'casual' | 'bullet'
+export type BuiltinStyle = 'business' | 'casual' | 'bullet' | 'summary'
+export type RefinementStyle = BuiltinStyle | string  // string = custom style ID
 
 const SYSTEM_COMMON = `【共通ルール】
 - フィラー語（えーと、あの、まあ、なんか、知ってる？ など）を削除
@@ -9,7 +10,7 @@ const SYSTEM_COMMON = `【共通ルール】
 - 元の意味・情報は変えない
 - 整形後のテキストのみ返す（説明文・前置きは不要）`
 
-const SYSTEM_PROMPTS: Record<RefinementStyle, string> = {
+export const BUILTIN_PROMPTS: Record<BuiltinStyle, string> = {
   business: `${SYSTEM_COMMON}
 
 【ビジネス】
@@ -22,6 +23,14 @@ const SYSTEM_PROMPTS: Record<RefinementStyle, string> = {
 
 【箇条書き】
 上記ルールに加え、内容を論理的に整理して箇条書き形式に変換してください。`,
+  summary: `${SYSTEM_COMMON}
+
+【要約】
+上記ルールに加え、話の内容を以下の形式で整理してください：
+- 冒頭に1〜2文で要旨を簡潔にまとめる
+- 重要なポイント・補足事項を番号付きリストで列挙する
+- 最後にアクション・依頼事項があればまとめる
+見出しや装飾は使わず、シンプルな文章とリストのみで構成してください。`,
 }
 
 export function useClaude() {
@@ -29,7 +38,8 @@ export function useClaude() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const refine = useCallback(async (text: string, style: RefinementStyle): Promise<string | null> => {
+  // systemPrompt を直接受け取る（ビルトイン・カスタム両対応）
+  const refine = useCallback(async (text: string, systemPrompt: string): Promise<string | null> => {
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
     if (!apiKey) {
       setError('VITE_ANTHROPIC_API_KEY が設定されていません。')
@@ -51,7 +61,7 @@ export function useClaude() {
         body: JSON.stringify({
           model: 'claude-sonnet-4-5',
           max_tokens: 2048,
-          system: SYSTEM_PROMPTS[style],
+          system: systemPrompt,
           messages: [{ role: 'user', content: text }],
         }),
       })

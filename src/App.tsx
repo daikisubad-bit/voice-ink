@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRecorder } from './hooks/useRecorder'
 import { useGroq } from './hooks/useGroq'
-import { useClaude, type RefinementStyle } from './hooks/useClaude'
+import { useClaude, BUILTIN_PROMPTS } from './hooks/useClaude'
 import { useHistory } from './hooks/useHistory'
 import { useDictionary } from './hooks/useDictionary'
+import { useCustomStyles } from './hooks/useCustomStyles'
+import { applyVoiceCommands } from './utils/voiceCommands'
 import { RecordButton } from './components/RecordButton'
 import { StyleTabs } from './components/StyleTabs'
 import { TranscriptPanel } from './components/TranscriptPanel'
@@ -12,7 +14,7 @@ import { HistorySidebar } from './components/HistorySidebar'
 import { DictionaryModal } from './components/DictionaryModal'
 
 export default function App() {
-  const [style, setStyle] = useState<RefinementStyle>('business')
+  const [selectedStyleId, setSelectedStyleId] = useState<string>('business')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dictOpen, setDictOpen] = useState(false)
 
@@ -21,17 +23,31 @@ export default function App() {
   const claude = useClaude()
   const { history, addItem, clearHistory } = useHistory()
   const { entries, addEntry, removeEntry, updateEntry, applyDictionary } = useDictionary()
+  const { customStyles, addStyle, updateStyle, removeStyle } = useCustomStyles()
 
-  // 録音停止 → 文字起こし → 辞書適用 → AI整形
+  // 現在のスタイルのsystemPromptを解決
+  const resolvePrompt = useCallback(
+    (styleId: string): string => {
+      if (styleId in BUILTIN_PROMPTS) {
+        return BUILTIN_PROMPTS[styleId as keyof typeof BUILTIN_PROMPTS]
+      }
+      const custom = customStyles.find((s) => s.id === styleId)
+      return custom?.systemPrompt ?? BUILTIN_PROMPTS.business
+    },
+    [customStyles],
+  )
+
+  // 録音停止 → 文字起こし → 音声コマンド→辞書適用 → AI整形
   useEffect(() => {
     if (recorder.state === 'processing' && recorder.audioBlob) {
       groq.transcribe(recorder.audioBlob).then((text) => {
         recorder.resetProcessing()
         if (text) {
-          const corrected = applyDictionary(text)
-          claude.refine(corrected, style).then((refined) => {
+          const processed = applyDictionary(applyVoiceCommands(text))
+          const prompt = resolvePrompt(selectedStyleId)
+          claude.refine(processed, prompt).then((refined) => {
             if (refined) {
-              addItem({ transcript: corrected, refined, style })
+              addItem({ transcript: processed, refined, style: selectedStyleId as 'business' })
             }
           })
         }
@@ -40,32 +56,29 @@ export default function App() {
   }, [recorder.state, recorder.audioBlob]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStyleChange = useCallback(
-    (newStyle: RefinementStyle) => {
-      setStyle(newStyle)
+    (newId: string) => {
+      setSelectedStyleId(newId)
       if (groq.transcript) {
-        claude.refine(groq.transcript, newStyle)
+        claude.refine(groq.transcript, resolvePrompt(newId))
       }
     },
-    [groq.transcript, claude],
+    [groq.transcript, claude, resolvePrompt],
   )
 
   const handleRetry = useCallback(() => {
     if (groq.transcript) {
-      claude.refine(groq.transcript, style)
+      claude.refine(groq.transcript, resolvePrompt(selectedStyleId))
     }
-  }, [groq.transcript, style, claude])
+  }, [groq.transcript, selectedStyleId, claude, resolvePrompt])
 
   const handleHistorySelect = useCallback(
     (item: (typeof history)[0]) => {
       groq.setTranscript(item.transcript)
       claude.setRefined(item.refined)
-      setStyle(item.style)
+      setSelectedStyleId(item.style)
     },
     [groq, claude],
   )
-
-  const groqError = groq.error
-  const recorderError = recorder.error
 
   return (
     <div className="min-h-svh bg-[#0a0a0f] text-slate-200 flex flex-col">
@@ -103,7 +116,6 @@ export default function App() {
           <span className="font-semibold tracking-wide text-slate-100">VoiceInk</span>
         </div>
 
-        {/* 辞書ボタン */}
         <button
           onClick={() => setDictOpen(true)}
           className="relative p-2 text-slate-400 hover:text-slate-200 transition-colors"
@@ -123,11 +135,18 @@ export default function App() {
         className="flex-1 flex flex-col gap-4 px-4 py-4 overflow-y-auto max-w-2xl w-full mx-auto"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 160px)' }}
       >
-        <StyleTabs style={style} onChange={handleStyleChange} />
+        <StyleTabs
+          selectedId={selectedStyleId}
+          customStyles={customStyles}
+          onChange={handleStyleChange}
+          onAddStyle={addStyle}
+          onUpdateStyle={updateStyle}
+          onRemoveStyle={removeStyle}
+        />
 
-        {(recorderError || groqError) && (
+        {(recorder.error || groq.error) && (
           <div className="bg-red-900/30 border border-red-800 rounded-xl p-3">
-            <p className="text-red-300 text-sm whitespace-pre-wrap">{recorderError ?? groqError}</p>
+            <p className="text-red-300 text-sm whitespace-pre-wrap">{recorder.error ?? groq.error}</p>
           </div>
         )}
 
