@@ -3,6 +3,7 @@
 
   // ---- State ----
   let panelVisible = false
+  let thinkingMode = false
   let recorderState = 'idle' // idle | recording | processing
   let mediaRecorder = null
   let audioChunks = []
@@ -55,13 +56,19 @@
     [/なかぐろ|中黒/gi, '・'],
   ]
 
+  const NO_PERIOD_ENDINGS = /[。！？…!?]$|笑$|（笑）$|（笑$|ｗ$|w$|くてんなし$/i
+  const REMOVE_KUTTEN_NASHI = /くてんなし$/gi
+
   function applyVoiceCommands(text) {
     let r = text
     for (const [p, rep] of VOICE_CMDS) r = r.replace(p, rep)
+    // 。笑 → 笑 の修正
+    r = r.replace(/。(笑|（笑）|（笑)/g, '$1')
     return r.split('\n').map(line => {
       const t = line.trimEnd()
       if (!t) return t
-      if (/[。！？…!?]$/.test(t)) return t
+      if (REMOVE_KUTTEN_NASHI.test(t)) return t.replace(REMOVE_KUTTEN_NASHI, '').trimEnd()
+      if (NO_PERIOD_ENDINGS.test(t)) return t
       return t + '。'
     }).join('\n')
   }
@@ -107,6 +114,11 @@
 
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-action=close]')) togglePanel()
+    if (e.target.closest('[data-action=toggle-thinking]')) {
+      thinkingMode = !thinkingMode
+      const btn = panel.querySelector('.vi-thinking-btn')
+      if (btn) btn.classList.toggle('active', thinkingMode)
+    }
   })
 
   // ---- Tab switching ----
@@ -249,7 +261,8 @@
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-5',
-          max_tokens: 2048,
+          max_tokens: thinkingMode ? 10000 : 2048,
+          ...(thinkingMode ? { thinking: { type: 'enabled', budget_tokens: 8000 } } : {}),
           system: SYSTEM_PROMPTS[currentStyle] || SYSTEM_PROMPTS.business,
           messages: [{ role: 'user', content: text }],
         }),
@@ -259,7 +272,9 @@
         throw new Error(`Claude ${res.status}: ${msg}`)
       }
       const data = await res.json()
-      refined = data.content?.[0]?.text?.trim() ?? ''
+      // thinkingモードではtextブロックのみ抽出（thinkingブロックを除外）
+      const textBlock = data.content?.find(b => b.type === 'text')
+      refined = textBlock?.text?.trim() ?? data.content?.[0]?.text?.trim() ?? ''
       showResult(refined)
 
       // Auto-insert if setting is on
@@ -418,11 +433,14 @@
     return `
       <div class="vi-header">
         <div class="vi-title"><span class="vi-dot"></span>VoiceInk</div>
-        <button class="vi-close" data-action="close">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button class="vi-thinking-btn${thinkingMode ? ' active' : ''}" data-action="toggle-thinking" title="Thinkingモード（精度UP・低速）">🧠</button>
+          <button class="vi-close" data-action="close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="vi-tabs">${tabs}</div>
       <div class="vi-body">
