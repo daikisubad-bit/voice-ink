@@ -89,3 +89,42 @@ function addEntry() {
   dictTo.value   = ''
   dictFrom.focus()
 }
+
+// エクスポート
+document.getElementById('dict-export-btn').addEventListener('click', () => {
+  const json = JSON.stringify(dictEntries, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url  = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'voiceink-dict.json'
+  a.click()
+  URL.revokeObjectURL(url)
+})
+
+// インポート
+document.getElementById('dict-import-input').addEventListener('change', (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    try {
+      const imported = JSON.parse(ev.target.result)
+      if (!Array.isArray(imported)) throw new Error()
+      // 重複を避けてマージ
+      const existing = new Set(dictEntries.map(d => d.from))
+      for (const entry of imported) {
+        if (entry.from && entry.to && !existing.has(entry.from)) {
+          dictEntries.push(entry)
+          existing.add(entry.from)
+        }
+      }
+      saveDictEntries()
+      renderDict()
+    } catch {
+      alert('読み込みに失敗しました。VoiceInk の辞書ファイルを選択してください。')
+    }
+  }
+  reader.readAsText(file)
+  e.target.value = ''
+})

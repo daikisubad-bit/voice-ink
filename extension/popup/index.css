@@ -192,3 +192,23 @@ body {
   transition: background 0.15s;
 }
 .dict-add-btn:hover { background: #818cf8; }
+
+.dict-io-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.dict-io-btn {
+  flex: 1;
+  padding: 6px;
+  background: #1e1e2e;
+  color: #94a3b8;
+  border: 1px solid #2a2a3e;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.dict-io-btn:hover { color: #e2e8f0; background: #2a2a3e; }
