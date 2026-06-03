@@ -104,6 +104,12 @@
   const actionsEl  = () => $('#vi-actions')
   const errorEl    = () => $('#vi-error')
 
+  // ×ボタンに直接リスナーを設定（イベント委譲の問題を回避）
+  panel.querySelector('[data-action=close]').addEventListener('click', (e) => {
+    e.stopPropagation()
+    togglePanel()
+  })
+
   // ---- Toggle panel ----
   function togglePanel() {
     panelVisible = !panelVisible
@@ -163,13 +169,9 @@
     }, true)
   })()
 
-  panel.addEventListener('click', (e) => {
-    if (e.target.closest('[data-action=close]')) togglePanel()
-    if (e.target.closest('[data-action=toggle-thinking]')) {
-      thinkingMode = !thinkingMode
-      const btn = panel.querySelector('.vi-thinking-btn')
-      if (btn) btn.classList.toggle('active', thinkingMode)
-    }
+  panel.querySelector('[data-action=toggle-thinking]').addEventListener('click', () => {
+    thinkingMode = !thinkingMode
+    panel.querySelector('.vi-thinking-btn').classList.toggle('active', thinkingMode)
   })
 
   // ---- Tab switching ----
