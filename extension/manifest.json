@@ -30,8 +30,8 @@
   "commands": {
     "toggle-voiceink": {
       "suggested_key": {
-        "default": "Ctrl+Shift+V",
-        "mac": "Command+Shift+V"
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
       },
       "description": "VoiceInkを開く/閉じる"
     }
