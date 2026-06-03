@@ -353,29 +353,21 @@
   function insertTextInto(el, text) {
     el.focus()
     if (el.isContentEditable) {
-      const sel = window.getSelection()
-      if (sel && sel.rangeCount) {
-        const range = sel.getRangeAt(0)
-        range.deleteContents()
-        range.insertNode(document.createTextNode(text))
-        range.collapse(false)
-      } else {
-        el.textContent += text
-      }
-      el.dispatchEvent(new Event('input', { bubbles: true }))
+      // execCommand を使うとサイト側の内部状態を壊さずに挿入できる
+      document.execCommand('insertText', false, text)
     } else {
       const start = el.selectionStart ?? el.value.length
-      const end = el.selectionEnd ?? el.value.length
-      el.value = el.value.slice(0, start) + text + el.value.slice(end)
+      const end   = el.selectionEnd   ?? el.value.length
+      const nativeSet = Object.getOwnPropertyDescriptor(
+        Object.getPrototypeOf(el), 'value'
+      )?.set
+      if (nativeSet) {
+        nativeSet.call(el, el.value.slice(0, start) + text + el.value.slice(end))
+      } else {
+        el.value = el.value.slice(0, start) + text + el.value.slice(end)
+      }
       el.selectionStart = el.selectionEnd = start + text.length
       el.dispatchEvent(new Event('input', { bubbles: true }))
-      el.dispatchEvent(new Event('change', { bubbles: true }))
-      // React対応
-      const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement?.prototype || window.HTMLInputElement.prototype, 'value')
-      if (nativeInput?.set) {
-        nativeInput.set.call(el, el.value)
-        el.dispatchEvent(new Event('input', { bubbles: true }))
-      }
     }
   }
 
