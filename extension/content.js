@@ -188,12 +188,12 @@
   async function onRecordingStop(mimeType) {
     const blob = new Blob(audioChunks, { type: mimeType })
     const text = await transcribeAudio(blob)
-    if (!text) { resetIdle(); return }
+    resetIdle() // 文字起こし完了後すぐに録音ボタンを解放
+    if (!text) return
 
     transcript = applyVoiceCommands(text)
     showTranscript(transcript)
-    await refineText(transcript)
-    resetIdle()
+    refineText(transcript) // Claudeは非同期で処理（awaitしない）
   }
 
   function resetIdle() {
