@@ -118,8 +118,9 @@
 
   fab.addEventListener('click', togglePanel)
 
-  // keyboard.js（document_start）から Space キーイベントを受け取る
-  window.addEventListener('voiceink-space-key', () => {
+  // keyboard.js（MAIN world）から postMessage で Space キーを受け取る
+  window.addEventListener('message', (e) => {
+    if (e.data?.type !== 'VOICEINK_SPACE') return
     if (!panelVisible) return
     if (recorderState === 'idle') startRecording()
     else if (recorderState === 'recording') stopRecording()

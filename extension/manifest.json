@@ -15,7 +15,8 @@
     {
       "matches": ["<all_urls>"],
       "js": ["keyboard.js"],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "world": "MAIN"
     },
     {
       "matches": ["<all_urls>"],

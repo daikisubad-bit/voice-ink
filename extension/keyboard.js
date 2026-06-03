@@ -1,11 +1,11 @@
-// ページのJSより先に登録することでSpaceキーを確実に取得する
-document.addEventListener('keydown', (e) => {
+// MAIN world + document_start でページのJSより先に登録
+window.addEventListener('keydown', (e) => {
   if (e.code !== 'Space') return
   const ae = document.activeElement
   const tag = ae?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || ae?.isContentEditable) return
-  // content.js に通知
-  window.dispatchEvent(new CustomEvent('voiceink-space-key'))
   e.preventDefault()
   e.stopImmediatePropagation()
+  // isolated world の content.js へ postMessage で通知
+  window.postMessage({ type: 'VOICEINK_SPACE' }, '*')
 }, true)
