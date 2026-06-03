@@ -1,0 +1,480 @@
+(() => {
+  if (document.getElementById('voiceink-root')) return
+
+  // ---- State ----
+  let panelVisible = false
+  let recorderState = 'idle' // idle | recording | processing
+  let mediaRecorder = null
+  let audioChunks = []
+  let audioStream = null
+  let audioCtx = null
+  let analyser = null
+  let animFrame = null
+  let timerInterval = null
+  let timerSecs = 0
+  let currentStyle = 'business'
+  let lastFocusedInput = null
+  let transcript = null
+  let refined = null
+
+  // ---- Track last focused input ----
+  document.addEventListener('focusin', (e) => {
+    const el = e.target
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+      lastFocusedInput = el
+    }
+  }, true)
+
+  // ---- Styles config ----
+  const STYLES = [
+    { id: 'business', label: '📝 ビジネス' },
+    { id: 'casual',   label: '💬 カジュアル' },
+    { id: 'bullet',   label: '📋 箇条書き' },
+    { id: 'summary',  label: '📊 要約' },
+  ]
+
+  const SYSTEM_COMMON = `【共通ルール】
+- フィラー語（えーと、あの、まあ、なんか など）を削除
+- 同じ内容の繰り返しを削除
+- 話しながら自己修正した部分は最終意図のみ残す
+- 元の意味・情報は変えない
+- 整形後のテキストのみ返す（説明文・前置きは不要）`
+
+  const SYSTEM_PROMPTS = {
+    business: `${SYSTEM_COMMON}\n\n【ビジネス】\nビジネスメール・報告書として読みやすい丁寧な文体に整形してください。`,
+    casual:   `${SYSTEM_COMMON}\n\n【カジュアル】\n自然で読みやすいカジュアルな文体に整形してください。`,
+    bullet:   `${SYSTEM_COMMON}\n\n【箇条書き】\n内容を論理的に整理して箇条書き形式に変換してください。`,
+    summary:  `${SYSTEM_COMMON}\n\n【要約】\n冒頭に1〜2文で要旨をまとめ、重要ポイントを番号付きリストで列挙し、アクション項目があればまとめてください。`,
+  }
+
+  const VOICE_CMDS = [
+    [/びっくりまーく|びっくりマーク/gi, '！'],
+    [/はてな/gi, '？'],
+    [/てんてんてん|さんてんリーダー/gi, '…'],
+    [/かいぎょう|改行/gi, '\n'],
+    [/なかぐろ|中黒/gi, '・'],
+  ]
+
+  function applyVoiceCommands(text) {
+    let r = text
+    for (const [p, rep] of VOICE_CMDS) r = r.replace(p, rep)
+    return r.split('\n').map(line => {
+      const t = line.trimEnd()
+      if (!t) return t
+      if (/[。！？…!?]$/.test(t)) return t
+      return t + '。'
+    }).join('\n')
+  }
+
+  // ---- Build UI ----
+  const root = document.createElement('div')
+  root.id = 'voiceink-root'
+
+  const fab = document.createElement('button')
+  fab.id = 'voiceink-fab'
+  fab.title = 'VoiceInk (Cmd+Shift+V)'
+  fab.innerHTML = micIcon()
+
+  const panel = document.createElement('div')
+  panel.id = 'voiceink-panel'
+  panel.className = 'hidden'
+  panel.innerHTML = buildPanel()
+
+  root.appendChild(fab)
+  root.appendChild(panel)
+  document.body.appendChild(root)
+
+  // ---- Panel element refs ----
+  const $ = (sel) => panel.querySelector(sel)
+  const statusEl   = () => $('.vi-status')
+  const wavesEl    = () => $('.vi-waves')
+  const recordBtn  = () => $('.vi-record-btn')
+  const tabsEl     = () => $('.vi-tabs')
+  const transcriptBox = () => $('#vi-transcript-box')
+  const transcriptText = () => $('#vi-transcript-text')
+  const resultBox  = () => $('#vi-result-box')
+  const resultText = () => $('#vi-result-text')
+  const actionsEl  = () => $('#vi-actions')
+  const errorEl    = () => $('#vi-error')
+
+  // ---- Toggle panel ----
+  function togglePanel() {
+    panelVisible = !panelVisible
+    panel.classList.toggle('hidden', !panelVisible)
+  }
+
+  fab.addEventListener('click', togglePanel)
+  $('[data-action=close]') && panel.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action=close]')) togglePanel()
+  })
+
+  panel.addEventListener('click', (e) => {
+    const close = e.target.closest('[data-action=close]')
+    if (close) togglePanel()
+  })
+
+  // ---- Tab switching ----
+  panel.addEventListener('click', (e) => {
+    const tab = e.target.closest('.vi-tab')
+    if (!tab) return
+    currentStyle = tab.dataset.style
+    panel.querySelectorAll('.vi-tab').forEach(t => t.classList.toggle('active', t.dataset.style === currentStyle))
+    // Re-refine if transcript exists
+    if (transcript && recorderState === 'idle') refineText(transcript)
+  })
+
+  // ---- Record button ----
+  panel.addEventListener('click', (e) => {
+    if (!e.target.closest('.vi-record-btn')) return
+    if (recorderState === 'idle') startRecording()
+    else if (recorderState === 'recording') stopRecording()
+  })
+
+  // ---- Insert / Copy buttons ----
+  panel.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action=insert]')) insertText()
+    if (e.target.closest('[data-action=copy]')) copyText()
+  })
+
+  // ---- Recording ----
+  async function startRecording() {
+    clearResults()
+    try {
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      showError('マイクへのアクセスが拒否されました。')
+      return
+    }
+
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus' : 'audio/webm'
+    mediaRecorder = new MediaRecorder(audioStream, { mimeType })
+    audioChunks = []
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data) }
+    mediaRecorder.onstop = () => onRecordingStop(mimeType)
+    mediaRecorder.start(100)
+
+    recorderState = 'recording'
+    fab.classList.add('recording')
+    recordBtn().classList.add('recording')
+    recordBtn().innerHTML = stopIcon()
+
+    timerSecs = 0
+    timerInterval = setInterval(() => {
+      timerSecs++
+      statusEl().className = 'vi-status recording'
+      statusEl().innerHTML = `<span class="vi-timer">${formatTime(timerSecs)}</span>`
+    }, 1000)
+    statusEl().className = 'vi-status recording'
+    statusEl().textContent = '0:00'
+
+    startWaveform()
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop()
+    audioStream?.getTracks().forEach(t => t.stop())
+    clearInterval(timerInterval)
+    stopWaveform()
+    recorderState = 'processing'
+    fab.classList.remove('recording')
+    recordBtn().classList.remove('recording')
+    recordBtn().disabled = true
+    recordBtn().innerHTML = spinnerIcon()
+    statusEl().className = 'vi-status processing'
+    statusEl().textContent = '処理中...'
+  }
+
+  async function onRecordingStop(mimeType) {
+    const blob = new Blob(audioChunks, { type: mimeType })
+    const text = await transcribeAudio(blob)
+    if (!text) { resetIdle(); return }
+
+    transcript = applyVoiceCommands(text)
+    showTranscript(transcript)
+    await refineText(transcript)
+    resetIdle()
+  }
+
+  function resetIdle() {
+    recorderState = 'idle'
+    recordBtn().disabled = false
+    recordBtn().innerHTML = micIcon()
+    recordBtn().classList.remove('recording')
+    statusEl().className = 'vi-status'
+    statusEl().textContent = 'タップして録音'
+    wavesEl().innerHTML = ''
+  }
+
+  // ---- Groq transcription ----
+  async function transcribeAudio(blob) {
+    const { groqKey } = await getKeys()
+    if (!groqKey) { showError('Groq APIキーが設定されていません。\n拡張機能アイコンから設定してください。'); return null }
+
+    const form = new FormData()
+    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm'
+    form.append('file', blob, `rec.${ext}`)
+    form.append('model', 'whisper-large-v3')
+    form.append('language', 'ja')
+    form.append('response_format', 'json')
+
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${groqKey}` },
+        body: form,
+      })
+      if (!res.ok) throw new Error(`Groq ${res.status}`)
+      const data = await res.json()
+      const text = data.text?.trim()
+      if (!text) { showError('音声が検出されませんでした。'); return null }
+      return text
+    } catch (e) {
+      showError('文字起こしに失敗しました: ' + e.message)
+      return null
+    }
+  }
+
+  // ---- Claude refinement ----
+  async function refineText(text) {
+    const { claudeKey } = await getKeys()
+    if (!claudeKey) { showError('Anthropic APIキーが設定されていません。\n拡張機能アイコンから設定してください。'); return }
+
+    showResultSkeleton()
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': claudeKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 2048,
+          system: SYSTEM_PROMPTS[currentStyle] || SYSTEM_PROMPTS.business,
+          messages: [{ role: 'user', content: text }],
+        }),
+      })
+      if (!res.ok) {
+        const msg = await res.text()
+        throw new Error(`Claude ${res.status}: ${msg}`)
+      }
+      const data = await res.json()
+      refined = data.content?.[0]?.text?.trim() ?? ''
+      showResult(refined)
+
+      // Auto-insert if setting is on
+      const { autoInsert } = await getSettings()
+      if (autoInsert && lastFocusedInput) insertTextInto(lastFocusedInput, refined)
+    } catch (e) {
+      showError('AI整形に失敗しました: ' + e.message)
+    }
+  }
+
+  // ---- Insert text into focused element ----
+  function insertText() {
+    if (!refined) return
+    if (lastFocusedInput) {
+      insertTextInto(lastFocusedInput, refined)
+      showCopiedFeedback('[data-action=insert]', '挿入しました ✓')
+    } else {
+      copyToClipboard(refined)
+      showCopiedFeedback('[data-action=insert]', 'コピーしました ✓')
+    }
+  }
+
+  function insertTextInto(el, text) {
+    el.focus()
+    if (el.isContentEditable) {
+      const sel = window.getSelection()
+      if (sel && sel.rangeCount) {
+        const range = sel.getRangeAt(0)
+        range.deleteContents()
+        range.insertNode(document.createTextNode(text))
+        range.collapse(false)
+      } else {
+        el.textContent += text
+      }
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    } else {
+      const start = el.selectionStart ?? el.value.length
+      const end = el.selectionEnd ?? el.value.length
+      el.value = el.value.slice(0, start) + text + el.value.slice(end)
+      el.selectionStart = el.selectionEnd = start + text.length
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+      // React対応
+      const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement?.prototype || window.HTMLInputElement.prototype, 'value')
+      if (nativeInput?.set) {
+        nativeInput.set.call(el, el.value)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+    }
+  }
+
+  function copyText() {
+    if (!refined) return
+    copyToClipboard(refined)
+    showCopiedFeedback('[data-action=copy]', 'コピー ✓')
+  }
+
+  async function copyToClipboard(text) {
+    try { await navigator.clipboard.writeText(text) }
+    catch { /* silent */ }
+  }
+
+  function showCopiedFeedback(selector, msg) {
+    const btn = panel.querySelector(selector)
+    if (!btn) return
+    const orig = btn.textContent
+    btn.textContent = msg
+    btn.classList.add('vi-btn-success')
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('vi-btn-success') }, 1500)
+  }
+
+  // ---- Storage helpers ----
+  function getKeys() {
+    return new Promise(resolve => {
+      chrome.storage.sync.get(['groqKey', 'claudeKey'], resolve)
+    })
+  }
+  function getSettings() {
+    return new Promise(resolve => {
+      chrome.storage.sync.get({ autoInsert: false }, resolve)
+    })
+  }
+
+  // ---- Waveform ----
+  function startWaveform() {
+    audioCtx = new AudioContext()
+    const src = audioCtx.createMediaStreamSource(audioStream)
+    analyser = audioCtx.createAnalyser()
+    analyser.fftSize = 64
+    src.connect(analyser)
+    const data = new Uint8Array(analyser.frequencyBinCount)
+
+    function draw() {
+      analyser.getByteFrequencyData(data)
+      const avg = data.reduce((a, b) => a + b, 0) / data.length
+      const vol = avg / 128
+      const bars = wavesEl().querySelectorAll('.vi-wave-bar')
+      bars.forEach((bar, i) => {
+        const h = 4 + vol * 28 * Math.abs(Math.sin((i / 4) * Math.PI))
+        bar.style.height = Math.max(4, h) + 'px'
+      })
+      animFrame = requestAnimationFrame(draw)
+    }
+    wavesEl().innerHTML = Array.from({ length: 5 }, () => '<div class="vi-wave-bar" style="height:4px"></div>').join('')
+    draw()
+  }
+
+  function stopWaveform() {
+    if (animFrame) cancelAnimationFrame(animFrame)
+    if (audioCtx) audioCtx.close()
+    wavesEl().innerHTML = ''
+  }
+
+  // ---- UI helpers ----
+  function clearResults() {
+    hideError()
+    transcriptBox().classList.add('hidden')
+    resultBox().classList.add('hidden')
+    actionsEl().classList.add('hidden')
+    transcript = null
+    refined = null
+  }
+
+  function showTranscript(text) {
+    transcriptText().textContent = text
+    transcriptBox().classList.remove('hidden')
+  }
+
+  function showResultSkeleton() {
+    resultText().innerHTML = '<div class="vi-skeleton" style="width:100%"></div><div class="vi-skeleton" style="width:80%"></div>'
+    resultBox().classList.remove('hidden')
+    actionsEl().classList.add('hidden')
+  }
+
+  function showResult(text) {
+    resultText().textContent = text
+    resultBox().classList.remove('hidden')
+    actionsEl().classList.remove('hidden')
+  }
+
+  function showError(msg) {
+    errorEl().textContent = msg
+    errorEl().classList.remove('hidden')
+  }
+
+  function hideError() {
+    errorEl().classList.add('hidden')
+  }
+
+  // ---- Templates ----
+  function buildPanel() {
+    const tabs = STYLES.map(s =>
+      `<button class="vi-tab${s.id === currentStyle ? ' active' : ''}" data-style="${s.id}">${s.label}</button>`
+    ).join('')
+
+    return `
+      <div class="vi-header">
+        <div class="vi-title"><span class="vi-dot"></span>VoiceInk</div>
+        <button class="vi-close" data-action="close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="vi-tabs">${tabs}</div>
+      <div class="vi-body">
+        <div class="vi-waves"></div>
+        <div class="vi-status">タップして録音</div>
+        <button class="vi-record-btn">${micIcon()}</button>
+        <div id="vi-error" class="vi-error hidden"></div>
+        <div id="vi-transcript-box" class="vi-transcript hidden">
+          <div class="vi-transcript-label">文字起こし（原文）</div>
+          <div id="vi-transcript-text" class="vi-transcript-text"></div>
+        </div>
+        <div id="vi-result-box" class="vi-result hidden">
+          <div class="vi-result-label">AI整形結果</div>
+          <div id="vi-result-text" class="vi-result-text"></div>
+        </div>
+        <div id="vi-actions" class="vi-actions hidden">
+          <button class="vi-btn vi-btn-insert" data-action="insert">入力欄に挿入</button>
+          <button class="vi-btn vi-btn-copy" data-action="copy">コピー</button>
+        </div>
+      </div>
+    `
+  }
+
+  function micIcon() {
+    return `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zm-7 8h2a5 5 0 0010 0h2a7 7 0 01-6 6.93V20h3v2H8v-2h3v-2.07A7 7 0 015 11z"/>
+    </svg>`
+  }
+
+  function stopIcon() {
+    return `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="12" height="12" rx="2"/>
+    </svg>`
+  }
+
+  function spinnerIcon() {
+    return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" class="vi-spin" style="animation:vi-spin 1s linear infinite">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity=".25"/>
+      <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8v8z"/>
+    </svg>`
+  }
+
+  function formatTime(s) {
+    return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
+  }
+
+  // ---- Keyboard shortcut from background ----
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'TOGGLE_VOICEINK') togglePanel()
+  })
+})()
