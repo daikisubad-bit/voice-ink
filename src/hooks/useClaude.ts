@@ -60,7 +60,8 @@ export function useClaude() {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-5',
-          max_tokens: 2048,
+          max_tokens: 10000,
+          thinking: { type: 'enabled', budget_tokens: 8000 },
           system: systemPrompt,
           messages: [{ role: 'user', content: text }],
         }),
@@ -72,7 +73,8 @@ export function useClaude() {
       }
 
       const data = await res.json()
-      const result: string = data.content?.[0]?.text?.trim() ?? ''
+      const textBlock = data.content?.find((b: { type: string }) => b.type === 'text')
+      const result: string = textBlock?.text?.trim() ?? data.content?.[0]?.text?.trim() ?? ''
       setRefined(result)
       return result
     } catch (err) {

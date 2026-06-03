@@ -6,11 +6,11 @@ const SUBSTITUTIONS: [RegExp, string][] = [
   [/なかぐろ|中黒/gi, '・'],
 ]
 
-// 句点を付けない語尾パターン
-const NO_PERIOD_ENDINGS = /[。！？…!?]$|笑$|（笑）$|（笑$|ｗ$|w$|ｗｗ$|くてんなし$/i
+// 句点を付けない語尾パターン（記号終わり・感嘆・笑い）
+const NO_PERIOD_ENDINGS = /[。！？…!?]$|笑$|（笑）$|（笑$|ｗ$|w$|ｗｗ$/i
 
-// 「くてんなし」コマンドを除去するパターン
-const REMOVE_KUTTEN_NASHI = /くてんなし$/gi
+// 文の途中であることを示す接続助詞・助詞の語尾（自動判定）
+const MID_SENTENCE_ENDINGS = /けど$|けれど$|けれども$|ながら$|つつ$|たり$|のに$|ので$|だから$|だし$|だって$|とか$|から$/
 
 // 。笑 → 笑 のように句点+笑を修正
 const FIX_WARAU = /。(笑|（笑）|（笑)/g
@@ -33,13 +33,11 @@ export function applyVoiceCommands(text: string): string {
       const trimmed = line.trimEnd()
       if (!trimmed) return trimmed
 
-      // 「くてんなし」が含まれていたら除去して句点なしで返す
-      if (REMOVE_KUTTEN_NASHI.test(trimmed)) {
-        return trimmed.replace(REMOVE_KUTTEN_NASHI, '').trimEnd()
-      }
-
       // 句点が不要な語尾なら何もしない
       if (NO_PERIOD_ENDINGS.test(trimmed)) return trimmed
+
+      // 接続助詞で終わる＝文の途中と判断して句点なし
+      if (MID_SENTENCE_ENDINGS.test(trimmed)) return trimmed
 
       return trimmed + '。'
     })

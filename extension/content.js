@@ -3,7 +3,6 @@
 
   // ---- State ----
   let panelVisible = false
-  let thinkingMode = false
   let recorderState = 'idle' // idle | recording | processing
   let mediaRecorder = null
   let audioChunks = []
@@ -56,8 +55,8 @@
     [/なかぐろ|中黒/gi, '・'],
   ]
 
-  const NO_PERIOD_ENDINGS = /[。！？…!?]$|笑$|（笑）$|（笑$|ｗ$|w$|くてんなし$/i
-  const REMOVE_KUTTEN_NASHI = /くてんなし$/gi
+  const NO_PERIOD_ENDINGS = /[。！？…!?]$|笑$|（笑）$|（笑$|ｗ$|w$/i
+  const MID_SENTENCE_ENDINGS = /けど$|けれど$|けれども$|ながら$|つつ$|たり$|のに$|ので$|だから$|だし$|だって$|とか$|から$/
 
   function applyVoiceCommands(text) {
     let r = text
@@ -67,8 +66,8 @@
     return r.split('\n').map(line => {
       const t = line.trimEnd()
       if (!t) return t
-      if (REMOVE_KUTTEN_NASHI.test(t)) return t.replace(REMOVE_KUTTEN_NASHI, '').trimEnd()
       if (NO_PERIOD_ENDINGS.test(t)) return t
+      if (MID_SENTENCE_ENDINGS.test(t)) return t
       return t + '。'
     }).join('\n')
   }
@@ -114,11 +113,6 @@
 
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-action=close]')) togglePanel()
-    if (e.target.closest('[data-action=toggle-thinking]')) {
-      thinkingMode = !thinkingMode
-      const btn = panel.querySelector('.vi-thinking-btn')
-      if (btn) btn.classList.toggle('active', thinkingMode)
-    }
   })
 
   // ---- Tab switching ----
@@ -261,8 +255,8 @@
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-5',
-          max_tokens: thinkingMode ? 10000 : 2048,
-          ...(thinkingMode ? { thinking: { type: 'enabled', budget_tokens: 8000 } } : {}),
+          max_tokens: 10000,
+          thinking: { type: 'enabled', budget_tokens: 8000 },
           system: SYSTEM_PROMPTS[currentStyle] || SYSTEM_PROMPTS.business,
           messages: [{ role: 'user', content: text }],
         }),
@@ -434,7 +428,6 @@
       <div class="vi-header">
         <div class="vi-title"><span class="vi-dot"></span>VoiceInk</div>
         <div style="display:flex;align-items:center;gap:6px">
-          <button class="vi-thinking-btn${thinkingMode ? ' active' : ''}" data-action="toggle-thinking" title="Thinkingモード（精度UP・低速）">🧠</button>
           <button class="vi-close" data-action="close">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
