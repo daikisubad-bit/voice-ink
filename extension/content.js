@@ -112,6 +112,19 @@
 
   fab.addEventListener('click', togglePanel)
 
+  // Space キーで録音開始・停止（パネルが開いていて入力欄にフォーカスがない場合）
+  document.addEventListener('keydown', (e) => {
+    if (!panelVisible) return
+    if (e.code !== 'Space') return
+    const tag = document.activeElement?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
+    // パネル内の要素にフォーカスがある場合もスキップ
+    if (panel.contains(document.activeElement)) return
+    e.preventDefault()
+    if (recorderState === 'idle') startRecording()
+    else if (recorderState === 'recording') stopRecording()
+  }, true)
+
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-action=close]')) togglePanel()
     if (e.target.closest('[data-action=toggle-thinking]')) {
