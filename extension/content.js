@@ -112,18 +112,56 @@
 
   fab.addEventListener('click', togglePanel)
 
-  // Space キーで録音開始・停止（パネルが開いていて入力欄にフォーカスがない場合）
+  // Space キーで録音開始・停止（テキスト入力系にフォーカスがない場合のみ）
   document.addEventListener('keydown', (e) => {
     if (!panelVisible) return
     if (e.code !== 'Space') return
-    const tag = document.activeElement?.tagName
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
-    // パネル内の要素にフォーカスがある場合もスキップ
-    if (panel.contains(document.activeElement)) return
+    const ae = document.activeElement
+    const tag = ae?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || ae?.isContentEditable) return
     e.preventDefault()
+    e.stopImmediatePropagation()
     if (recorderState === 'idle') startRecording()
     else if (recorderState === 'recording') stopRecording()
   }, true)
+
+  // ---- Draggable panel ----
+  ;(() => {
+    let dragging = false, ox = 0, oy = 0
+    const handle = () => panel.querySelector('.vi-header')
+
+    panel.addEventListener('mousedown', (e) => {
+      const h = handle()
+      if (!h || !h.contains(e.target)) return
+      if (e.target.closest('button')) return // ボタンはドラッグ対象外
+      dragging = true
+      const rect = panel.getBoundingClientRect()
+      ox = e.clientX - rect.left
+      oy = e.clientY - rect.top
+      panel.style.transition = 'none'
+      e.preventDefault()
+    })
+
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return
+      const x = e.clientX - ox
+      const y = e.clientY - oy
+      // 画面外に出ないようにクランプ
+      const maxX = window.innerWidth - panel.offsetWidth
+      const maxY = window.innerHeight - panel.offsetHeight
+      panel.style.right = 'auto'
+      panel.style.bottom = 'auto'
+      panel.style.left = Math.max(0, Math.min(x, maxX)) + 'px'
+      panel.style.top = Math.max(0, Math.min(y, maxY)) + 'px'
+    }, true)
+
+    document.addEventListener('mouseup', () => {
+      if (dragging) {
+        dragging = false
+        panel.style.transition = ''
+      }
+    }, true)
+  })()
 
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-action=close]')) togglePanel()
