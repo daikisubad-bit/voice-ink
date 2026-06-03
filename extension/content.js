@@ -118,18 +118,12 @@
 
   fab.addEventListener('click', togglePanel)
 
-  // Space キーで録音開始・停止（テキスト入力系にフォーカスがない場合のみ）
-  document.addEventListener('keydown', (e) => {
+  // keyboard.js（document_start）から Space キーイベントを受け取る
+  window.addEventListener('voiceink-space-key', () => {
     if (!panelVisible) return
-    if (e.code !== 'Space') return
-    const ae = document.activeElement
-    const tag = ae?.tagName
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || ae?.isContentEditable) return
-    e.preventDefault()
-    e.stopImmediatePropagation()
     if (recorderState === 'idle') startRecording()
     else if (recorderState === 'recording') stopRecording()
-  }, true)
+  })
 
   // ---- Draggable panel ----
   ;(() => {
