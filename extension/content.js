@@ -118,14 +118,6 @@
 
   fab.addEventListener('click', togglePanel)
 
-  // keyboard.js（MAIN world）から postMessage で Space キーを受け取る
-  window.addEventListener('message', (e) => {
-    if (e.data?.type !== 'VOICEINK_SPACE') return
-    if (!panelVisible) return
-    if (recorderState === 'idle') startRecording()
-    else if (recorderState === 'recording') stopRecording()
-  })
-
   // ---- Draggable panel ----
   ;(() => {
     let dragging = false, ox = 0, oy = 0
