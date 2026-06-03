@@ -11,11 +11,15 @@ function formatTime(secs) {
   return `${m}分${s}秒`
 }
 
-chrome.storage.sync.get({ totalRecordingSecs: 0 }, (data) => {
-  const total = data.totalRecordingSecs
-  const saved = Math.round(total * 2.5) // 話す速度はタイピングの約3.5倍 → 節約 = total × 2.5
-  document.getElementById('stats-total').textContent = formatTime(total)
-  document.getElementById('stats-saved').textContent = formatTime(saved)
+chrome.storage.sync.get({ totalRecordingSecs: 0, monthlyStats: {} }, (data) => {
+  const monthKey = new Date().toISOString().slice(0, 7)
+  const total    = data.totalRecordingSecs
+  const monthly  = data.monthlyStats[monthKey] || 0
+
+  document.getElementById('stats-total').textContent       = formatTime(total)
+  document.getElementById('stats-saved').textContent       = formatTime(Math.round(total * 2.5))
+  document.getElementById('stats-month-total').textContent = formatTime(monthly)
+  document.getElementById('stats-month-saved').textContent = formatTime(Math.round(monthly * 2.5))
 })
 
 // Load saved settings

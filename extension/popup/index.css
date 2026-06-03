@@ -41,6 +41,9 @@ body {
 
 .content { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 
+.stats-section { display: flex; flex-direction: column; gap: 4px; }
+.stats-heading { font-size: 11px; color: #475569; font-weight: 500; }
+
 .stats-box {
   display: flex;
   background: #0a0a0f;

@@ -243,10 +243,16 @@
     if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop()
     audioStream?.getTracks().forEach(t => t.stop())
     clearInterval(timerInterval)
-    // 録音時間を累計保存
+    // 録音時間を累計・月別で保存
     if (timerSecs > 0) {
-      chrome.storage.sync.get({ totalRecordingSecs: 0 }, (data) => {
-        chrome.storage.sync.set({ totalRecordingSecs: data.totalRecordingSecs + timerSecs })
+      const monthKey = new Date().toISOString().slice(0, 7) // "2026-06"
+      chrome.storage.sync.get({ totalRecordingSecs: 0, monthlyStats: {} }, (data) => {
+        const monthly = data.monthlyStats
+        monthly[monthKey] = (monthly[monthKey] || 0) + timerSecs
+        chrome.storage.sync.set({
+          totalRecordingSecs: data.totalRecordingSecs + timerSecs,
+          monthlyStats: monthly,
+        })
       })
     }
     stopWaveform()
