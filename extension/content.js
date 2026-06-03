@@ -353,8 +353,19 @@
   function insertTextInto(el, text) {
     el.focus()
     if (el.isContentEditable) {
-      // execCommand を使うとサイト側の内部状態を壊さずに挿入できる
-      document.execCommand('insertText', false, text)
+      // まず beforeinput イベントを試す（ProseMirror 等のリッチエディタ対応）
+      const beforeInput = new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertText',
+        data: text,
+      })
+      const notCancelled = el.dispatchEvent(beforeInput)
+
+      if (notCancelled) {
+        // beforeinput がキャンセルされなかった場合は execCommand にフォールバック
+        document.execCommand('insertText', false, text)
+      }
     } else {
       const start = el.selectionStart ?? el.value.length
       const end   = el.selectionEnd   ?? el.value.length
