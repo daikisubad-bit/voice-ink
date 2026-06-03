@@ -104,13 +104,9 @@
   }
 
   fab.addEventListener('click', togglePanel)
-  $('[data-action=close]') && panel.addEventListener('click', (e) => {
-    if (e.target.closest('[data-action=close]')) togglePanel()
-  })
 
   panel.addEventListener('click', (e) => {
-    const close = e.target.closest('[data-action=close]')
-    if (close) togglePanel()
+    if (e.target.closest('[data-action=close]')) togglePanel()
   })
 
   // ---- Tab switching ----
