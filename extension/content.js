@@ -249,9 +249,22 @@
     resetIdle() // 文字起こし完了後すぐに録音ボタンを解放
     if (!text) return
 
-    transcript = applyVoiceCommands(text)
+    const dictApplied = await applyDictionary(applyVoiceCommands(text))
+    transcript = dictApplied
     showTranscript(transcript)
     refineText(transcript) // Claudeは非同期で処理（awaitしない）
+  }
+
+  async function applyDictionary(text) {
+    const { dictEntries = [] } = await new Promise(resolve =>
+      chrome.storage.sync.get({ dictEntries: [] }, resolve)
+    )
+    let result = text
+    for (const { from, to } of dictEntries) {
+      if (!from) continue
+      result = result.replaceAll(from, to)
+    }
+    return result
   }
 
   function resetIdle() {

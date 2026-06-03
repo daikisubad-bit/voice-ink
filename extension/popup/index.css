@@ -134,3 +134,61 @@ body {
   font-size: 11px;
   color: #64748b;
 }
+
+.dict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.dict-empty { font-size: 11px; color: #334155; }
+.dict-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #13131a;
+  border: 1px solid #1e1e2e;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.dict-from { color: #f87171; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dict-arr  { color: #475569; flex-shrink: 0; }
+.dict-to   { color: #86efac; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dict-del-btn {
+  background: none;
+  border: none;
+  color: #475569;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.dict-del-btn:hover { color: #f87171; }
+
+.dict-add-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+.dict-input { flex: 1; min-width: 0; }
+.dict-arrow { color: #475569; flex-shrink: 0; font-size: 12px; }
+.dict-add-btn {
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.dict-add-btn:hover { background: #818cf8; }

@@ -41,6 +41,17 @@
     <button id="save-btn" class="save-btn">保存</button>
     <p id="saved-msg" class="saved-msg hidden">✓ 保存しました</p>
 
+    <div class="section">
+      <label class="label">辞書 <span class="hint">（文字起こしの自動修正）</span></label>
+      <div id="dict-list" class="dict-list"></div>
+      <div class="dict-add-row">
+        <input id="dict-from" type="text" placeholder="誤認識される語" class="input dict-input" />
+        <span class="dict-arrow">→</span>
+        <input id="dict-to" type="text" placeholder="正しい語" class="input dict-input" />
+        <button id="dict-add-btn" class="dict-add-btn">＋</button>
+      </div>
+    </div>
+
     <p class="shortcut-hint">ショートカット: <code>Cmd+Shift+Y</code></p>
   </div>
 
