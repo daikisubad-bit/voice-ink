@@ -87,8 +87,25 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
 }
 
+const DEFAULT_DICT = [
+  { from: 'ビックリバーク', to: '！' },
+  { from: 'びっくりバーク', to: '！' },
+  { from: 'はてなマーク', to: '？' },
+]
+
 chrome.storage.sync.get({ dictEntries: [] }, (data) => {
   dictEntries = data.dictEntries
+  // 未登録のデフォルト辞書を追加
+  const existing = new Set(dictEntries.map(d => d.from))
+  let added = false
+  for (const entry of DEFAULT_DICT) {
+    if (!existing.has(entry.from)) {
+      dictEntries.push(entry)
+      existing.add(entry.from)
+      added = true
+    }
+  }
+  if (added) chrome.storage.sync.set({ dictEntries })
   renderDict()
 })
 
