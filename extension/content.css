@@ -19,7 +19,7 @@
   border-radius: 50%;
   background: #6366f1;
   border: none;
-  cursor: pointer;
+  cursor: grab;
   display: flex;
   align-items: center;
   justify-content: center;

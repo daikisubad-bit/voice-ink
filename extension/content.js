@@ -170,6 +170,64 @@
 
   fab.addEventListener('click', togglePanel)
 
+  // ---- Draggable FAB ----
+  ;(() => {
+    // 保存済み位置を復元
+    try {
+      const saved = JSON.parse(localStorage.getItem('voiceink-fab-pos') || 'null')
+      if (saved) {
+        fab.style.right = 'auto'
+        fab.style.bottom = 'auto'
+        fab.style.left = saved.left + 'px'
+        fab.style.top  = saved.top  + 'px'
+      }
+    } catch {}
+
+    let dragging = false, ox = 0, oy = 0, moved = false
+
+    fab.addEventListener('mousedown', (e) => {
+      dragging = true
+      moved = false
+      const rect = fab.getBoundingClientRect()
+      ox = e.clientX - rect.left
+      oy = e.clientY - rect.top
+      fab.style.transition = 'none'
+      e.preventDefault()
+    })
+
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return
+      moved = true
+      const x = e.clientX - ox
+      const y = e.clientY - oy
+      const maxX = window.innerWidth  - fab.offsetWidth
+      const maxY = window.innerHeight - fab.offsetHeight
+      const left = Math.max(0, Math.min(x, maxX))
+      const top  = Math.max(0, Math.min(y, maxY))
+      fab.style.right  = 'auto'
+      fab.style.bottom = 'auto'
+      fab.style.left   = left + 'px'
+      fab.style.top    = top  + 'px'
+    }, true)
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return
+      dragging = false
+      fab.style.transition = ''
+      if (moved) {
+        // 位置を保存
+        try {
+          localStorage.setItem('voiceink-fab-pos', JSON.stringify({
+            left: parseFloat(fab.style.left),
+            top:  parseFloat(fab.style.top),
+          }))
+        } catch {}
+        // ドラッグ後はクリックイベントを無視
+        fab.addEventListener('click', (ev) => ev.stopImmediatePropagation(), { once: true, capture: true })
+      }
+    }, true)
+  })()
+
   // ---- Draggable panel ----
   ;(() => {
     let dragging = false, ox = 0, oy = 0
