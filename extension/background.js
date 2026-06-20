@@ -28,9 +28,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 })
 
-async function transcribeAudio({ buffer, mimeType, groqKey }) {
+async function transcribeAudio({ base64, mimeType, groqKey }) {
   try {
-    const blob = new Blob([new Uint8Array(buffer)], { type: mimeType })
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    const blob = new Blob([bytes], { type: mimeType })
     const ext = mimeType.includes('mp4') ? 'mp4' : 'webm'
     const form = new FormData()
     form.append('file', blob, `rec.${ext}`)
@@ -43,7 +46,10 @@ async function transcribeAudio({ buffer, mimeType, groqKey }) {
       headers: { Authorization: `Bearer ${groqKey}` },
       body: form,
     })
-    if (!res.ok) throw new Error(`Groq ${res.status}`)
+    if (!res.ok) {
+      const msg = await res.text()
+      throw new Error(`Groq ${res.status}: ${msg}`)
+    }
     const data = await res.json()
     return { text: data.text?.trim() ?? '' }
   } catch (e) {

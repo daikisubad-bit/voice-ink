@@ -389,16 +389,27 @@
     wavesEl().innerHTML = ''
   }
 
+  // chrome.runtime.sendMessageはArrayBufferをそのまま渡すとシリアライズで壊れることがあるため
+  // Base64文字列に変換してから送る
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result.split(',')[1])
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  }
+
   // ---- Groq transcription（fetchはbackground側で実行：ページのCSPを回避） ----
   async function transcribeAudio(blob) {
     const { groqKey } = await getKeys()
     if (!groqKey) { showError('Groq APIキーが設定されていません。\n拡張機能アイコンから設定してください。'); return null }
 
     try {
-      const buffer = await blob.arrayBuffer()
+      const base64 = await blobToBase64(blob)
       const res = await chrome.runtime.sendMessage({
         type: 'TRANSCRIBE',
-        buffer,
+        base64,
         mimeType: blob.type,
         groqKey,
       })
