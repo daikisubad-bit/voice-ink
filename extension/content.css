@@ -295,3 +295,33 @@
   color: #f87171;
   font-size: 13px;
 }
+
+.vi-result-text[contenteditable="true"] {
+  cursor: text;
+  outline: none;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  transition: background 0.15s;
+}
+.vi-result-text[contenteditable="true"]:focus {
+  background: rgba(99,102,241,0.08);
+}
+
+.vi-remember-btn {
+  margin-top: 6px;
+  width: 100%;
+  padding: 6px;
+  background: #1e1e2e;
+  color: #818cf8;
+  border: 1px solid #6366f1;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.vi-remember-btn:hover {
+  background: #6366f1;
+  color: #fff;
+}

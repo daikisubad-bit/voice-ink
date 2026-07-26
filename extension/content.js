@@ -134,8 +134,9 @@
   const tabsEl     = () => $('.vi-tabs')
   const transcriptBox = () => $('#vi-transcript-box')
   const transcriptText = () => $('#vi-transcript-text')
-  const resultBox  = () => $('#vi-result-box')
-  const resultText = () => $('#vi-result-text')
+  const resultBox   = () => $('#vi-result-box')
+  const resultText  = () => $('#vi-result-text')
+  const rememberBtn = () => $('#vi-remember-btn')
   const actionsEl  = () => $('#vi-actions')
   const errorEl    = () => $('#vi-error')
 
@@ -275,6 +276,7 @@
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-action=insert]')) insertText()
     if (e.target.closest('[data-action=copy]')) copyText()
+    if (e.target.closest('[data-action=remember]')) rememberCorrection()
   })
 
   // ---- Recording ----
@@ -444,14 +446,92 @@
     }
   }
 
+  // ---- Remember corrections ----
+  async function rememberCorrection() {
+    const edited = resultText().textContent.trim()
+    if (!edited || edited === refined) return
+
+    const learned = diffLearn(refined, edited)
+    if (learned.length === 0) {
+      showCopiedFeedback('[data-action=remember]', '差分が検出できませんでした')
+      return
+    }
+
+    const { dictEntries = [] } = await new Promise(r => chrome.storage.sync.get({ dictEntries: [] }, r))
+    const existing = new Set(dictEntries.map(d => d.from))
+    let added = 0
+    for (const { from, to } of learned) {
+      if (!existing.has(from)) {
+        dictEntries.push({ from, to })
+        existing.add(from)
+        added++
+      }
+    }
+    await new Promise(r => chrome.storage.sync.set({ dictEntries }, r))
+    refined = edited
+    rememberBtn().classList.add('hidden')
+    showCopiedFeedback('[data-action=remember]', `${added}件覚えました ✓`)
+  }
+
+  // 単語レベルのdiff：1〜2単語の置き換えのみ検出
+  function diffLearn(before, after) {
+    const tokenize = s => s.match(/[a-zA-Z0-9ぁ-んァ-ン一-龯々ー]+|[^\s]/g) || []
+    const bToks = tokenize(before)
+    const aToks = tokenize(after)
+    const results = []
+
+    // 最長共通部分列（LCS）ベースのシンプルdiff
+    const lcs = buildLCS(bToks, aToks)
+    let bi = 0, ai = 0, li = 0
+    while (bi < bToks.length || ai < aToks.length) {
+      if (li < lcs.length && bi < bToks.length && ai < aToks.length &&
+          bToks[bi] === lcs[li] && aToks[ai] === lcs[li]) {
+        bi++; ai++; li++
+        continue
+      }
+      // 削除されたトークンを収集
+      const delStart = bi
+      while (bi < bToks.length && (li >= lcs.length || bToks[bi] !== lcs[li])) bi++
+      // 追加されたトークンを収集
+      const addStart = ai
+      while (ai < aToks.length && (li >= lcs.length || aToks[ai] !== lcs[li])) ai++
+
+      const del = bToks.slice(delStart, bi)
+      const add = aToks.slice(addStart, ai)
+      // 1〜2単語の置き換えのみ記憶
+      if (del.length >= 1 && del.length <= 2 && add.length >= 1 && add.length <= 2) {
+        results.push({ from: del.join(''), to: add.join('') })
+      }
+    }
+    return results
+  }
+
+  function buildLCS(a, b) {
+    const m = a.length, n = b.length
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1])
+    const lcs = []
+    let i = m, j = n
+    while (i > 0 && j > 0) {
+      if (a[i-1] === b[j-1]) { lcs.unshift(a[i-1]); i--; j-- }
+      else if (dp[i-1][j] > dp[i][j-1]) i--
+      else j--
+    }
+    return lcs
+  }
+
   // ---- Insert text into focused element ----
   function insertText() {
     if (!refined) return
+    // 編集済みの場合は編集後テキストを使う
+    const text = resultText()?.textContent?.trim() || refined
     if (lastFocusedInput) {
-      insertTextInto(lastFocusedInput, refined)
+      insertTextInto(lastFocusedInput, text)
       showCopiedFeedback('[data-action=insert]', '挿入しました ✓')
     } else {
-      copyToClipboard(refined)
+      copyToClipboard(text)
       showCopiedFeedback('[data-action=insert]', 'コピーしました ✓')
     }
   }
@@ -490,7 +570,8 @@
 
   function copyText() {
     if (!refined) return
-    copyToClipboard(refined)
+    const text = resultText()?.textContent?.trim() || refined
+    copyToClipboard(text)
     showCopiedFeedback('[data-action=copy]', 'コピー ✓')
   }
 
@@ -572,9 +653,20 @@
   }
 
   function showResult(text) {
-    resultText().textContent = text
+    const el = resultText()
+    el.textContent = text
+    rememberBtn().classList.add('hidden')
     resultBox().classList.remove('hidden')
     actionsEl().classList.remove('hidden')
+    // 編集されたら「修正を記憶」ボタンを表示
+    el.oninput = () => {
+      const edited = el.textContent.trim()
+      if (edited !== refined) {
+        rememberBtn().classList.remove('hidden')
+      } else {
+        rememberBtn().classList.add('hidden')
+      }
+    }
   }
 
   function showError(msg) {
@@ -616,7 +708,8 @@
         </div>
         <div id="vi-result-box" class="vi-result hidden">
           <div class="vi-result-label">AI整形結果</div>
-          <div id="vi-result-text" class="vi-result-text"></div>
+          <div id="vi-result-text" class="vi-result-text" contenteditable="true" spellcheck="false"></div>
+          <button id="vi-remember-btn" class="vi-remember-btn hidden" data-action="remember">修正を記憶する</button>
         </div>
         <div id="vi-actions" class="vi-actions hidden">
           <button class="vi-btn vi-btn-insert" data-action="insert">入力欄に挿入</button>
