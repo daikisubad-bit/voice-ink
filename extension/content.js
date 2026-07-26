@@ -389,32 +389,30 @@
     wavesEl().innerHTML = ''
   }
 
-  // chrome.runtime.sendMessageはArrayBufferをそのまま渡すとシリアライズで壊れることがあるため
-  // Base64文字列に変換してから送る
-  function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result.split(',')[1])
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
-  }
-
-  // ---- Groq transcription（fetchはbackground側で実行：ページのCSPを回避） ----
+  // ---- Groq transcription ----
   async function transcribeAudio(blob) {
     const { groqKey } = await getKeys()
     if (!groqKey) { showError('Groq APIキーが設定されていません。\n拡張機能アイコンから設定してください。'); return null }
 
+    const form = new FormData()
+    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm'
+    form.append('file', blob, `rec.${ext}`)
+    form.append('model', 'whisper-large-v3')
+    form.append('language', 'ja')
+    form.append('response_format', 'json')
+
     try {
-      const base64 = await blobToBase64(blob)
-      const res = await chrome.runtime.sendMessage({
-        type: 'TRANSCRIBE',
-        base64,
-        mimeType: blob.type,
-        groqKey,
+      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${groqKey}` },
+        body: form,
       })
-      if (res?.error) throw new Error(res.error)
-      const text = res?.text?.trim()
+      if (!res.ok) {
+        const msg = await res.text()
+        throw new Error(`Groq ${res.status}: ${msg}`)
+      }
+      const data = await res.json()
+      const text = data.text?.trim()
       if (!text) { showError('音声が検出されませんでした。'); return null }
       return text
     } catch (e) {
@@ -423,7 +421,7 @@
     }
   }
 
-  // ---- Claude refinement（fetchはbackground側で実行：ページのCSPを回避） ----
+  // ---- Claude refinement ----
   async function refineText(text) {
     const { claudeKey } = await getKeys()
     if (!claudeKey) { showError('Anthropic APIキーが設定されていません。\n拡張機能アイコンから設定してください。'); return }
@@ -431,18 +429,31 @@
     showResultSkeleton()
 
     try {
-      const res = await chrome.runtime.sendMessage({
-        type: 'REFINE',
-        text,
-        systemPrompt: SYSTEM_PROMPTS[currentStyle] || SYSTEM_PROMPTS.casual,
-        thinkingMode,
-        claudeKey,
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': claudeKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: thinkingMode ? 10000 : 2048,
+          ...(thinkingMode ? { thinking: { type: 'enabled', budget_tokens: 8000 } } : {}),
+          system: SYSTEM_PROMPTS[currentStyle] || SYSTEM_PROMPTS.casual,
+          messages: [{ role: 'user', content: `<voice_transcript>\n${text}\n</voice_transcript>` }],
+        }),
       })
-      if (res?.error) throw new Error(res.error)
-      refined = res?.refined ?? ''
+      if (!res.ok) {
+        const msg = await res.text()
+        throw new Error(`Claude ${res.status}: ${msg}`)
+      }
+      const data = await res.json()
+      const textBlock = data.content?.find(b => b.type === 'text')
+      refined = textBlock?.text?.trim() ?? data.content?.[0]?.text?.trim() ?? ''
       showResult(refined)
 
-      // Auto-insert if setting is on
       const { autoInsert } = await getSettings()
       if (autoInsert && lastFocusedInput) insertTextInto(lastFocusedInput, refined)
     } catch (e) {
